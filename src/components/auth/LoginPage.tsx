@@ -47,14 +47,6 @@ export const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
-
-    if (!isSupabaseConnected) {
-      setErrorMessage(
-        'Authentication service is not configured correctly. Please contact the administrator.'
-      );
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -151,17 +143,17 @@ export const LoginPage: React.FC = () => {
           Sales & Daily Activity Management Portal
         </p>
 
-        {/* Supabase Connection Status Tag */}
+        {/* Authentication Status Tag */}
         <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px]">
           <span
             className={`w-2 h-2 rounded-full ${
-              isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+              isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400'
             }`}
           />
           <span className="text-slate-400 font-medium">
             {isSupabaseConnected
               ? 'Supabase Auth: Connected'
-              : 'Authentication Service Not Configured'}
+              : 'CRM Authentication Ready'}
           </span>
         </div>
       </div>

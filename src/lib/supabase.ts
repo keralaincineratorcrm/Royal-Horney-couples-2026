@@ -67,14 +67,18 @@ import {
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabaseUrl = (rawSupabaseUrl || '').trim().replace(/^["']|["']$/g, '');
+const cleanedUrl = (rawSupabaseUrl || '').trim().replace(/^["']|["']$/g, '');
+export const supabaseUrl =
+  cleanedUrl && !cleanedUrl.startsWith('http') && cleanedUrl.endsWith('.supabase.co')
+    ? `https://${cleanedUrl}`
+    : cleanedUrl;
 export const supabaseAnonKey = (rawSupabaseAnonKey || '').trim().replace(/^["']|["']$/g, '');
 
 // Ensure only valid public anon/publishable keys are accepted (never short placeholders or service_role keys)
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
     supabaseAnonKey &&
-    supabaseAnonKey.length >= 30 &&
+    supabaseAnonKey.length >= 25 &&
     !supabaseUrl.includes('your-project') &&
     !supabaseAnonKey.includes('your-anon') &&
     !supabaseAnonKey.startsWith('sb_secret_') &&

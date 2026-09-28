@@ -9,19 +9,26 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function normalizeSupabaseUrl(val?: string): string {
+  if (!val) return '';
+  const cleaned = val.trim().replace(/^["']|["']$/g, '');
+  if (!cleaned || cleaned.includes('your-project')) return '';
+  if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+    return cleaned;
+  }
+  if (cleaned.endsWith('.supabase.co')) {
+    return `https://${cleaned}`;
+  }
+  return '';
+}
+
 function isValidSupabaseAnonKey(val?: string): boolean {
   if (!val) return false;
   const cleaned = val.trim().replace(/^["']|["']$/g, '');
-  if (cleaned.length < 30) return false;
+  if (cleaned.length < 25) return false;
   if (cleaned.includes('your-anon')) return false;
   if (cleaned.startsWith('sb_secret_')) return false;
   return true;
-}
-
-function isValidSupabaseUrl(val?: string): boolean {
-  if (!val) return false;
-  const cleaned = val.trim().replace(/^["']|["']$/g, '');
-  return cleaned.startsWith('http') && !cleaned.includes('your-project');
 }
 
 export default defineConfig(({ mode }) => {
@@ -41,17 +48,34 @@ export default defineConfig(({ mode }) => {
 
   const candidateUrls = [
     fileEnv.VITE_SUPABASE_URL,
+    fileEnv.SUPABASE_URL,
     loaded.VITE_SUPABASE_URL,
+    loaded.SUPABASE_URL,
+    loaded.NEXT_PUBLIC_SUPABASE_URL,
     process.env.VITE_SUPABASE_URL,
+    process.env.SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
   ];
-  const supabaseUrl = (candidateUrls.find(isValidSupabaseUrl) || '').trim().replace(/^["']|["']$/g, '');
+  const supabaseUrl = candidateUrls.map(normalizeSupabaseUrl).find((u) => Boolean(u)) || '';
 
   const candidateKeys = [
     fileEnv.VITE_SUPABASE_ANON_KEY,
+    fileEnv.VITE_SUPABASE_PUBLISHABLE_KEY,
+    fileEnv.SUPABASE_ANON_KEY,
     loaded.VITE_SUPABASE_ANON_KEY,
+    loaded.VITE_SUPABASE_PUBLISHABLE_KEY,
+    loaded.SUPABASE_ANON_KEY,
+    loaded.SUPABASE_PUBLISHABLE_KEY,
+    loaded.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     process.env.VITE_SUPABASE_ANON_KEY,
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    process.env.SUPABASE_ANON_KEY,
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   ];
-  const supabaseAnonKey = (candidateKeys.find(isValidSupabaseAnonKey) || '').trim().replace(/^["']|["']$/g, '');
+  const supabaseAnonKey = (candidateKeys.find(isValidSupabaseAnonKey) || '')
+    .trim()
+    .replace(/^["']|["']$/g, '');
 
   return {
     base: '/',

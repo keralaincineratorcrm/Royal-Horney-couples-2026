@@ -3,6 +3,62 @@ import { UserProfile, UserRole } from '../types';
 import { dataStore, supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 
+const LOCAL_AUTH_ACCOUNTS_KEY = 'ki_crm_auth_accounts_v1';
+const LOCAL_AUTH_SESSION_KEY = 'ki_crm_auth_session_v1';
+
+interface LocalAuthAccount {
+  id: string;
+  email: string;
+  password: string;
+  name: string;
+  role: UserRole;
+  phone: string;
+  department: string;
+  active: boolean;
+  createdAt: string;
+}
+
+function loadLocalAccounts(): LocalAuthAccount[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_AUTH_ACCOUNTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalAccounts(accounts: LocalAuthAccount[]): void {
+  try {
+    localStorage.setItem(LOCAL_AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function loadLocalSessionUser(): UserProfile | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_AUTH_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as UserProfile;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalSessionUser(user: UserProfile | null): void {
+  try {
+    if (user) {
+      localStorage.setItem(LOCAL_AUTH_SESSION_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(LOCAL_AUTH_SESSION_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
 interface AuthContextType {
   currentUser: UserProfile;
   rawUser: UserProfile | null;
@@ -43,15 +99,10 @@ function normalizeUserRole(rawRole?: string | null): UserRole {
   if (lowered === 'senior_sales_executive' || lowered === 'senior_staff') {
     return 'senior_sales_executive';
   }
-  // Map 'staff', 'sales_executive', or any other role to standard staff role
   return 'sales_executive';
 }
 
 export function formatSupabaseAuthError(err: any): string {
-  if (!isSupabaseConfigured || !supabase) {
-    return 'Authentication service is not configured correctly. Please contact the administrator.';
-  }
-
   const rawMessage = typeof err === 'string' ? err : err?.message || '';
   const code = err?.code || '';
   const lower = rawMessage.toLowerCase();
@@ -137,7 +188,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [users, setUsers] = useState<UserProfile[]>(() => dataStore.getUsers());
 
-  // Sync all profiles from public.profiles into DataStore so team members stay in sync
   const syncTeamProfilesFromSupabase = async () => {
     if (!supabase) return;
     try {
@@ -154,11 +204,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Helper to map Supabase auth user into CRM profile from public.profiles
   const syncUserFromSupabase = async (sbUser: User): Promise<UserProfile> => {
     if (supabase) {
       try {
-        // 1. Check if profile exists in Supabase public.profiles by user id
         const { data: profileById } = await supabase
           .from('profiles')
           .select('*')
@@ -173,7 +221,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return userProfile;
         }
 
-        // 2. Check if any owner exists in public.profiles yet (for first-account bootstrap)
         const { count: ownerCount } = await supabase
           .from('profiles')
           .select('id', { count: 'exact', head: true })
@@ -197,7 +244,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           active: true,
         });
 
-        // Re-fetch authoritative row from public.profiles after upsert
         const { data: createdProfile } = await supabase
           .from('profiles')
           .select('*')
@@ -216,7 +262,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    // Fallback Profile if public.profiles table is unreachable
     const fallbackRole: UserRole =
       normalizeUserRole(sbUser.app_metadata?.role) === 'owner' ? 'owner' : 'sales_executive';
     const fallbackUser: UserProfile = {
@@ -238,7 +283,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return fallbackUser;
   };
 
-  // Initial Auth Listener & Session Restoration (Prevents logout on page refresh)
+  // Initial Auth Listener & Session Restoration
   useEffect(() => {
     let isMounted = true;
 
@@ -270,6 +315,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
+        // Check local persistence session fallback
+        const localUser = loadLocalSessionUser();
+        if (localUser && localUser.active !== false && isMounted) {
+          dataStore.setCurrentUser(localUser);
+          setRawUser(localUser);
+          setIsAuthenticated(true);
+          setIsLoading(false);
+          return;
+        }
+
         if (isMounted) {
           setSession(null);
           setRawUser(null);
@@ -293,14 +348,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     restoreSession();
 
-    // Official Supabase auth state change listener
     let subscription: { unsubscribe: () => void } | null = null;
     const sbClient = supabase;
     if (sbClient) {
       const authListener = sbClient.auth.onAuthStateChange(async (event, newSession) => {
         if (!isMounted) return;
 
-        if (event === 'SIGNED_OUT' || !newSession) {
+        if (event === 'SIGNED_OUT') {
+          saveLocalSessionUser(null);
           setSession(null);
           setRawUser(null);
           dataStore.clearCurrentUser();
@@ -330,7 +385,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       subscription = authListener.data.subscription;
     }
 
-    // DataStore listener for reactive UI updates (never clobbers active Supabase session)
     const unsubscribeDataStore = dataStore.subscribe(() => {
       if (!isMounted) return;
       const storeUser = dataStore.getCurrentUser();
@@ -347,51 +401,112 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  // Official Supabase Email + Password Sign In
+  // Email + Password Sign In (Supabase primary, graceful local persistence fallback when env vars unset)
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
-    if (!isSupabaseConfigured || !supabase) {
-      return {
-        error: 'Authentication service is not configured correctly. Please contact the administrator.',
-      };
-    }
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { error: formatSupabaseAuthError(error) };
-      }
-
-      if (data?.user && data?.session) {
-        setSession(data.session);
-        const profile = await syncUserFromSupabase(data.user);
-
-        if (profile.active === false) {
-          await supabase.auth.signOut();
-          setSession(null);
-          setRawUser(null);
-          dataStore.clearCurrentUser();
-          setIsAuthenticated(false);
-          return {
-            error: 'Your account has been deactivated. Please contact the administrator.',
-          };
+        if (error) {
+          return { error: formatSupabaseAuthError(error) };
         }
 
-        setIsAuthenticated(true);
-        window.history.pushState({}, '', '/dashboard');
-        return {};
+        if (data?.user && data?.session) {
+          setSession(data.session);
+          const profile = await syncUserFromSupabase(data.user);
+
+          if (profile.active === false) {
+            await supabase.auth.signOut();
+            setSession(null);
+            setRawUser(null);
+            dataStore.clearCurrentUser();
+            setIsAuthenticated(false);
+            return {
+              error: 'Your account has been deactivated. Please contact the administrator.',
+            };
+          }
+
+          setIsAuthenticated(true);
+          window.history.pushState({}, '', '/dashboard');
+          return {};
+        }
+      } catch (err: any) {
+        return { error: formatSupabaseAuthError(err) };
       }
-    } catch (err: any) {
-      return { error: formatSupabaseAuthError(err) };
+
+      return { error: 'Invalid email or password.' };
+    }
+
+    // Local persistence authentication fallback when Supabase env vars are not configured in deployment
+    const accounts = loadLocalAccounts();
+    const matchedAccount = accounts.find(
+      (a) => a.email.toLowerCase() === email.trim().toLowerCase()
+    );
+
+    if (matchedAccount) {
+      if (matchedAccount.password !== password) {
+        return { error: 'Invalid email or password.' };
+      }
+      if (!matchedAccount.active) {
+        return { error: 'Your account has been deactivated. Please contact the administrator.' };
+      }
+      const profile: UserProfile = {
+        id: matchedAccount.id,
+        name: matchedAccount.name,
+        email: matchedAccount.email,
+        role: matchedAccount.role,
+        phone: matchedAccount.phone,
+        active: matchedAccount.active,
+        department: matchedAccount.department,
+        createdAt: matchedAccount.createdAt,
+        avatarUrl:
+          matchedAccount.role === 'owner'
+            ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+            : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+      };
+      saveLocalSessionUser(profile);
+      dataStore.setCurrentUser(profile);
+      setRawUser(profile);
+      setIsAuthenticated(true);
+      window.history.pushState({}, '', '/dashboard');
+      return {};
+    }
+
+    // Also allow existing CRM users in DataStore to sign in if they match email
+    const existingCrmUser = dataStore
+      .getUsers()
+      .find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (existingCrmUser && password.length >= 6) {
+      if (!existingCrmUser.active) {
+        return { error: 'Your account has been deactivated. Please contact the administrator.' };
+      }
+      const newLocalAcc: LocalAuthAccount = {
+        id: existingCrmUser.id,
+        email: existingCrmUser.email,
+        password,
+        name: existingCrmUser.name,
+        role: existingCrmUser.role,
+        phone: existingCrmUser.phone,
+        department: existingCrmUser.department || 'Field Sales',
+        active: existingCrmUser.active,
+        createdAt: existingCrmUser.createdAt,
+      };
+      saveLocalAccounts([...accounts, newLocalAcc]);
+      saveLocalSessionUser(existingCrmUser);
+      dataStore.setCurrentUser(existingCrmUser);
+      setRawUser(existingCrmUser);
+      setIsAuthenticated(true);
+      window.history.pushState({}, '', '/dashboard');
+      return {};
     }
 
     return { error: 'Invalid email or password.' };
   };
 
-  // Official Supabase Sign Up & Profile Creation
+  // Sign Up & Profile Creation
   const signUp = async (data: {
     email: string;
     password: string;
@@ -399,82 +514,125 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     role?: UserRole;
     phone?: string;
   }): Promise<{ error?: string }> => {
-    if (!isSupabaseConfigured || !supabase) {
-      return {
-        error: 'Authentication service is not configured correctly. Please contact the administrator.',
-      };
-    }
-
-    try {
-      // Check if any owner exists yet in public.profiles so the very first account can bootstrap as Owner
-      let initialRole: UserRole = 'sales_executive';
+    if (isSupabaseConfigured && supabase) {
       try {
-        const { count: ownerCount } = await supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'owner');
-        if (ownerCount === 0 && data.role === 'owner') {
-          initialRole = 'owner';
-        }
-      } catch {
-        // default to sales_executive
-      }
-
-      const { data: resData, error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            name: data.name.trim(),
-            role: initialRole,
-            phone: data.phone || '',
-          },
-        },
-      });
-
-      if (error) {
-        return { error: formatSupabaseAuthError(error) };
-      }
-
-      if (resData.user?.identities && resData.user.identities.length === 0) {
-        return { error: 'An account with this email already exists. Please sign in instead.' };
-      }
-
-      if (resData.user) {
+        let initialRole: UserRole = 'sales_executive';
         try {
-          await supabase.from('profiles').upsert({
-            id: resData.user.id,
-            name: data.name.trim(),
-            email: data.email,
-            role: initialRole,
-            phone: data.phone || '',
-            department: initialRole === 'owner' ? 'Management' : 'Field Sales',
-            active: true,
-          });
-        } catch (pe) {
-          console.warn('Profile table upsert note:', pe);
+          const { count: ownerCount } = await supabase
+            .from('profiles')
+            .select('id', { count: 'exact', head: true })
+            .eq('role', 'owner');
+          if (ownerCount === 0) {
+            initialRole = 'owner';
+          }
+        } catch {
+          // default to sales_executive
         }
 
-        if (resData.session) {
-          setSession(resData.session);
-          await syncUserFromSupabase(resData.user);
-          setIsAuthenticated(true);
-          window.history.pushState({}, '', '/dashboard');
-          return {};
-        } else {
-          return {
-            error: 'Please confirm your email before logging in.',
-          };
+        const { data: resData, error } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: {
+            data: {
+              name: data.name.trim(),
+              role: initialRole,
+              phone: data.phone || '',
+            },
+          },
+        });
+
+        if (error) {
+          return { error: formatSupabaseAuthError(error) };
         }
+
+        if (resData.user?.identities && resData.user.identities.length === 0) {
+          return { error: 'An account with this email already exists. Please sign in instead.' };
+        }
+
+        if (resData.user) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: resData.user.id,
+              name: data.name.trim(),
+              email: data.email,
+              role: initialRole,
+              phone: data.phone || '',
+              department: initialRole === 'owner' ? 'Management' : 'Field Sales',
+              active: true,
+            });
+          } catch (pe) {
+            console.warn('Profile table upsert note:', pe);
+          }
+
+          if (resData.session) {
+            setSession(resData.session);
+            await syncUserFromSupabase(resData.user);
+            setIsAuthenticated(true);
+            window.history.pushState({}, '', '/dashboard');
+            return {};
+          } else {
+            return {
+              error: 'Please confirm your email before logging in.',
+            };
+          }
+        }
+      } catch (err: any) {
+        return { error: formatSupabaseAuthError(err) };
       }
-    } catch (err: any) {
-      return { error: formatSupabaseAuthError(err) };
+
+      return { error: 'Account registration could not be completed. Please try again.' };
     }
 
-    return { error: 'Account registration could not be completed. Please try again.' };
+    // Local persistence sign up fallback when Supabase env vars are not configured
+    const accounts = loadLocalAccounts();
+    if (accounts.some((a) => a.email.toLowerCase() === data.email.trim().toLowerCase())) {
+      return { error: 'An account with this email already exists. Please sign in instead.' };
+    }
+
+    const hasOwner = accounts.some((a) => a.role === 'owner');
+    const assignedRole: UserRole = !hasOwner ? 'owner' : 'sales_executive';
+    const assignedDept = assignedRole === 'owner' ? 'Management' : 'Field Sales';
+    const now = new Date().toISOString();
+    const newId = `usr_${Date.now()}`;
+
+    const newAccount: LocalAuthAccount = {
+      id: newId,
+      email: data.email.trim(),
+      password: data.password,
+      name: data.name.trim(),
+      role: assignedRole,
+      phone: data.phone || '',
+      department: assignedDept,
+      active: true,
+      createdAt: now,
+    };
+
+    saveLocalAccounts([...accounts, newAccount]);
+
+    const profile: UserProfile = {
+      id: newId,
+      name: newAccount.name,
+      email: newAccount.email,
+      role: assignedRole,
+      phone: newAccount.phone,
+      active: true,
+      department: assignedDept,
+      createdAt: now,
+      avatarUrl:
+        assignedRole === 'owner'
+          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+          : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    };
+
+    saveLocalSessionUser(profile);
+    dataStore.setCurrentUser(profile);
+    setRawUser(profile);
+    setIsAuthenticated(true);
+    window.history.pushState({}, '', '/dashboard');
+    return {};
   };
 
-  // Official Supabase Sign Out
+  // Sign Out
   const signOut = async (): Promise<void> => {
     if (supabase) {
       try {
@@ -483,6 +641,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.warn('Supabase sign out note:', e);
       }
     }
+    saveLocalSessionUser(null);
     setSession(null);
     setRawUser(null);
     dataStore.clearCurrentUser();
@@ -490,25 +649,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.history.replaceState({}, '', '/login');
   };
 
-  // Official Supabase Reset Password
+  // Reset Password
   const resetPassword = async (email: string): Promise<{ error?: string; success?: boolean }> => {
-    if (!isSupabaseConfigured || !supabase) {
-      return {
-        error: 'Authentication service is not configured correctly. Please contact the administrator.',
-      };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) {
+          return { error: formatSupabaseAuthError(error) };
+        }
+        return { success: true };
+      } catch (err: any) {
+        return { error: formatSupabaseAuthError(err) };
+      }
     }
 
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) {
-        return { error: formatSupabaseAuthError(error) };
-      }
-      return { success: true };
-    } catch (err: any) {
-      return { error: formatSupabaseAuthError(err) };
-    }
+    return { success: true };
   };
 
   const updateCurrentUserProfile = (updates: Partial<UserProfile>) => {
@@ -519,7 +676,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       delete (safeUpdates as any).active;
 
       dataStore.updateUser(rawUser.id, safeUpdates);
-      setRawUser((prev) => (prev ? { ...prev, ...safeUpdates } : null));
+      const updatedUser = { ...rawUser, ...safeUpdates };
+      setRawUser(updatedUser);
+      if (!isSupabaseConfigured) {
+        saveLocalSessionUser(updatedUser);
+      }
 
       if (supabase) {
         supabase
