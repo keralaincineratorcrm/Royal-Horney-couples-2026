@@ -83,6 +83,14 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
     setSuccessMessage(true);
     setTimeout(() => {
       setSuccessMessage(false);
+      setCustomerName('');
+      setPhone('');
+      setAlternativePhone('');
+      setPlace('');
+      setAddress('');
+      setCareOf('');
+      setRemarks('');
+      setNextFollowUpDate('');
       onCustomerAdded(newLead);
       onClose();
     }, 600);

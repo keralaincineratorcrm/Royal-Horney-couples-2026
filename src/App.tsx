@@ -67,13 +67,18 @@ function MainCRMApp() {
   const [isMobilePreview, setIsMobilePreview] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Sync URL path when currentTab changes
+  // Sync URL path when currentTab changes, and protect Owner-only routes from Staff
   useEffect(() => {
+    if (!isOwner && (currentTab === 'team' || currentTab === 'settings')) {
+      setCurrentTab('dashboard');
+      window.history.replaceState({}, '', '/dashboard');
+      return;
+    }
     const targetPath = `/${currentTab}`;
     if (window.location.pathname !== targetPath) {
       window.history.replaceState({}, '', targetPath);
     }
-  }, [currentTab]);
+  }, [currentTab, isOwner]);
 
   // Handle browser back/forward navigation
   useEffect(() => {

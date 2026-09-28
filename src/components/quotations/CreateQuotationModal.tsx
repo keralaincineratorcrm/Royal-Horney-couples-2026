@@ -400,6 +400,8 @@ export const CreateQuotationModal: React.FC<CreateQuotationModalProps> = ({
       custPlace = createdCust.place;
       custAddress = createdCust.address;
       custCareOf = createdCust.careOf || '';
+      setSelectedCustomerId(createdCust.id);
+      setCustomerMode('existing');
     }
 
     const validUntilDate = new Date(

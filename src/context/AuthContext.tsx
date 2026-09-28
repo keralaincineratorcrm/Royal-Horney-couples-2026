@@ -297,7 +297,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (data?.session?.user && isMounted) {
             setSession(data.session);
-            setIsAuthenticated(true);
             const synced = await syncUserFromSupabase(data.session.user);
             if (isMounted) {
               if (synced.active === false) {
@@ -366,7 +365,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (newSession?.user) {
           setSession(newSession);
-          setIsAuthenticated(true);
           const synced = await syncUserFromSupabase(newSession.user);
           if (isMounted) {
             if (synced.active === false) {

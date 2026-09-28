@@ -184,24 +184,123 @@ class DataStore {
   }
 
   private init() {
+    const SAMPLE_CUSTOMER_IDS = new Set([
+      'cust_001',
+      'cust_002',
+      'cust_003',
+      'cust_004',
+      'cust_005',
+      'cust_006',
+      'cust_007',
+      'cust_008',
+    ]);
+    const SAMPLE_FOLLOWUP_IDS = new Set([
+      'fu_001',
+      'fu_002',
+      'fu_003',
+      'fu_004',
+      'fu_005',
+      'fu_006',
+      'fu_007',
+      'fu_008',
+      'fu_009',
+      'fu_010',
+    ]);
+    const SAMPLE_VISIT_IDS = new Set([
+      'vis_001',
+      'vis_002',
+      'vis_003',
+      'vis_004',
+      'vis_005',
+      'vis_006',
+      'vis_007',
+    ]);
+    const SAMPLE_QUOTATION_IDS = new Set(['qtn_001', 'qtn_002', 'qtn_003']);
+    const SAMPLE_ORDER_IDS = new Set([
+      'ord_001',
+      'ord_002',
+      'ord_003',
+      'ord_004',
+      'ord_005',
+      'ord_006',
+      'ord_007',
+    ]);
+    const SAMPLE_PAYMENT_IDS = new Set([
+      'pay_001',
+      'pay_002',
+      'pay_003',
+      'pay_004',
+      'pay_005',
+      'pay_006',
+      'pay_007',
+      'pay_008',
+    ]);
+    const SAMPLE_REPORT_IDS = new Set(['rep_001', 'rep_002']);
+    const SAMPLE_ACTIVITY_IDS = new Set(['act_001', 'act_002', 'act_003', 'act_004', 'act_005']);
+    const SAMPLE_NOTIFICATION_IDS = new Set(['notif_001', 'notif_002', 'notif_003', 'notif_004']);
+    const SAMPLE_AUDIT_IDS = new Set([
+      'audit_01',
+      'audit_02',
+      'audit_03',
+      'audit_04',
+      'audit_05',
+      'audit_06',
+    ]);
+
     this.users = loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS);
     this.products = loadStorage(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    this.customers = loadStorage(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
-    this.followUps = loadStorage(STORAGE_KEYS.FOLLOWUPS, INITIAL_FOLLOWUPS);
-    this.visits = loadStorage(STORAGE_KEYS.VISITS, INITIAL_VISITS);
-    this.quotations = loadStorage(STORAGE_KEYS.QUOTATIONS, INITIAL_QUOTATIONS);
-    this.orders = loadStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS);
-    this.payments = loadStorage(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS);
-    this.dailyReports = loadStorage(STORAGE_KEYS.DAILY_REPORTS, INITIAL_DAILY_REPORTS);
-    this.activities = loadStorage(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
-    this.notifications = loadStorage(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
+
+    this.customers = loadStorage(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS).filter(
+      (c) => !SAMPLE_CUSTOMER_IDS.has(c.id)
+    );
+    this.followUps = loadStorage(STORAGE_KEYS.FOLLOWUPS, INITIAL_FOLLOWUPS).filter(
+      (f) => !SAMPLE_FOLLOWUP_IDS.has(f.id) && !SAMPLE_CUSTOMER_IDS.has(f.customerId)
+    );
+    this.visits = loadStorage(STORAGE_KEYS.VISITS, INITIAL_VISITS).filter(
+      (v) => !SAMPLE_VISIT_IDS.has(v.id) && !SAMPLE_CUSTOMER_IDS.has(v.customerId)
+    );
+    this.quotations = loadStorage(STORAGE_KEYS.QUOTATIONS, INITIAL_QUOTATIONS).filter(
+      (q) => !SAMPLE_QUOTATION_IDS.has(q.id) && !SAMPLE_CUSTOMER_IDS.has(q.customerId)
+    );
+    this.orders = loadStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS).filter(
+      (o) => !SAMPLE_ORDER_IDS.has(o.id) && !SAMPLE_CUSTOMER_IDS.has(o.customerId)
+    );
+    this.payments = loadStorage(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS).filter(
+      (p) =>
+        !SAMPLE_PAYMENT_IDS.has(p.id) &&
+        !SAMPLE_ORDER_IDS.has(p.orderId) &&
+        !SAMPLE_CUSTOMER_IDS.has(p.customerId)
+    );
+    this.dailyReports = loadStorage(STORAGE_KEYS.DAILY_REPORTS, INITIAL_DAILY_REPORTS).filter(
+      (r) => !SAMPLE_REPORT_IDS.has(r.id)
+    );
+    this.activities = loadStorage(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES).filter(
+      (a) => !SAMPLE_ACTIVITY_IDS.has(a.id) && !SAMPLE_CUSTOMER_IDS.has(a.customerId)
+    );
+    this.notifications = loadStorage(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS).filter(
+      (n) => !SAMPLE_NOTIFICATION_IDS.has(n.id)
+    );
     this.companySettings = loadStorage(STORAGE_KEYS.COMPANY_SETTINGS, DEFAULT_COMPANY_SETTINGS);
     this.quotationSettings = loadStorage(STORAGE_KEYS.QUOTATION_SETTINGS, DEFAULT_QUOTATION_SETTINGS);
     this.orderSettings = loadStorage(STORAGE_KEYS.ORDER_SETTINGS, DEFAULT_ORDER_SETTINGS);
     this.systemPreferences = loadStorage(STORAGE_KEYS.SYSTEM_PREFERENCES, DEFAULT_SYSTEM_PREFERENCES);
     this.leadSources = loadStorage(STORAGE_KEYS.LEAD_SOURCES, DEFAULT_LEAD_SOURCES);
     this.workflowStatuses = loadStorage(STORAGE_KEYS.WORKFLOW_STATUSES, DEFAULT_WORKFLOW_STATUSES);
-    this.auditLogs = loadStorage(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS);
+    this.auditLogs = loadStorage(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS).filter(
+      (a) => !SAMPLE_AUDIT_IDS.has(a.id)
+    );
+
+    // Persist cleaned state so legacy sample records do not reappear
+    saveStorage(STORAGE_KEYS.CUSTOMERS, this.customers);
+    saveStorage(STORAGE_KEYS.FOLLOWUPS, this.followUps);
+    saveStorage(STORAGE_KEYS.VISITS, this.visits);
+    saveStorage(STORAGE_KEYS.QUOTATIONS, this.quotations);
+    saveStorage(STORAGE_KEYS.ORDERS, this.orders);
+    saveStorage(STORAGE_KEYS.PAYMENTS, this.payments);
+    saveStorage(STORAGE_KEYS.DAILY_REPORTS, this.dailyReports);
+    saveStorage(STORAGE_KEYS.ACTIVITIES, this.activities);
+    saveStorage(STORAGE_KEYS.NOTIFICATIONS, this.notifications);
+    saveStorage(STORAGE_KEYS.AUDIT_LOGS, this.auditLogs);
 
     // Ensure any legacy mock user session key is purged so only Supabase Auth dictates session state
     try {
@@ -233,7 +332,38 @@ class DataStore {
         (u) => u.id === user.id || (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase())
       );
       if (existingIdx !== -1) {
+        const oldId = this.users[existingIdx].id;
         this.users[existingIdx] = { ...this.users[existingIdx], ...user };
+        if (oldId && oldId !== user.id) {
+          this.customers = this.customers.map((c) =>
+            c.assignedToId === oldId ? { ...c, assignedToId: user.id, assignedToName: user.name } : c
+          );
+          saveStorage(STORAGE_KEYS.CUSTOMERS, this.customers);
+
+          this.followUps = this.followUps.map((f) =>
+            f.assignedToId === oldId ? { ...f, assignedToId: user.id, assignedToName: user.name } : f
+          );
+          saveStorage(STORAGE_KEYS.FOLLOWUPS, this.followUps);
+
+          this.visits = this.visits.map((v) =>
+            v.assignedToId === oldId
+              ? { ...v, assignedToId: user.id, assignedToName: user.name, executiveId: user.id, executiveName: user.name }
+              : v
+          );
+          saveStorage(STORAGE_KEYS.VISITS, this.visits);
+
+          this.quotations = this.quotations.map((q) =>
+            q.assignedToId === oldId ? { ...q, assignedToId: user.id, assignedToName: user.name } : q
+          );
+          saveStorage(STORAGE_KEYS.QUOTATIONS, this.quotations);
+
+          this.orders = this.orders.map((o) =>
+            o.assignedToId === oldId || o.assignedExecutiveId === oldId
+              ? { ...o, assignedToId: user.id, assignedToName: user.name, assignedExecutiveId: user.id, assignedExecutiveName: user.name }
+              : o
+          );
+          saveStorage(STORAGE_KEYS.ORDERS, this.orders);
+        }
       } else {
         this.users = [user, ...this.users];
       }
@@ -567,6 +697,36 @@ class DataStore {
     }
 
     if (updates.assignedToId && updates.assignedToId !== old.assignedToId) {
+      // Propagate new assignee to pending follow-ups, scheduled visits, and quotations for this customer
+      const newAssigneeId = updates.assignedToId;
+      const newAssigneeName = updates.assignedToName || old.assignedToName;
+      this.followUps = this.followUps.map((f) =>
+        f.customerId === id && f.status !== 'Completed'
+          ? { ...f, assignedToId: newAssigneeId, assignedToName: newAssigneeName }
+          : f
+      );
+      saveStorage(STORAGE_KEYS.FOLLOWUPS, this.followUps);
+
+      this.visits = this.visits.map((v) =>
+        v.customerId === id && v.status === 'Scheduled'
+          ? {
+              ...v,
+              assignedToId: newAssigneeId,
+              assignedToName: newAssigneeName,
+              executiveId: newAssigneeId,
+              executiveName: newAssigneeName,
+            }
+          : v
+      );
+      saveStorage(STORAGE_KEYS.VISITS, this.visits);
+
+      this.quotations = this.quotations.map((q) =>
+        q.customerId === id
+          ? { ...q, assignedToId: newAssigneeId, assignedToName: newAssigneeName }
+          : q
+      );
+      saveStorage(STORAGE_KEYS.QUOTATIONS, this.quotations);
+
       this.addActivity({
         customerId: id,
         customerName: `${updated.customerName} (${updated.place})`,
@@ -618,7 +778,10 @@ class DataStore {
     if (effectiveRole === 'owner' || effectiveRole === 'senior_sales_executive') {
       return [...list];
     }
-    return list.filter((f) => f.assignedToId === effectiveUserId);
+    const myCustomerIds = new Set(
+      this.customers.filter((c) => c.assignedToId === effectiveUserId).map((c) => c.id)
+    );
+    return list.filter((f) => f.assignedToId === effectiveUserId || myCustomerIds.has(f.customerId));
   }
 
   addFollowUp(followUp: Omit<FollowUp, 'id' | 'createdAt'>): FollowUp {
@@ -886,7 +1049,12 @@ class DataStore {
     if (effectiveRole === 'owner' || effectiveRole === 'senior_sales_executive') {
       return [...this.visits];
     }
-    return this.visits.filter((v) => v.assignedToId === effectiveUserId);
+    const myCustomerIds = new Set(
+      this.customers.filter((c) => c.assignedToId === effectiveUserId).map((c) => c.id)
+    );
+    return this.visits.filter(
+      (v) => v.assignedToId === effectiveUserId || myCustomerIds.has(v.customerId)
+    );
   }
 
   scheduleVisit(visitData: {
@@ -1241,7 +1409,12 @@ class DataStore {
     if (effectiveRole === 'owner' || effectiveRole === 'senior_sales_executive') {
       return [...this.quotations];
     }
-    return this.quotations.filter((q) => q.assignedToId === effectiveUserId);
+    const myCustomerIds = new Set(
+      this.customers.filter((c) => c.assignedToId === effectiveUserId).map((c) => c.id)
+    );
+    return this.quotations.filter(
+      (q) => q.assignedToId === effectiveUserId || myCustomerIds.has(q.customerId)
+    );
   }
 
   generateNextQuotationNumber(): string {
@@ -1828,8 +2001,14 @@ class DataStore {
 
     let result = [...this.orders];
     if (effectiveRole === 'sales_executive') {
+      const myCustomerIds = new Set(
+        this.customers.filter((c) => c.assignedToId === effectiveUserId).map((c) => c.id)
+      );
       result = result.filter(
-        (o) => o.assignedToId === effectiveUserId || o.assignedExecutiveId === effectiveUserId
+        (o) =>
+          o.assignedToId === effectiveUserId ||
+          o.assignedExecutiveId === effectiveUserId ||
+          myCustomerIds.has(o.customerId)
       );
     }
     // Sort newest first
@@ -2470,11 +2649,14 @@ class DataStore {
       return isPast && isNotDone;
     }).length;
 
-    const collectionAmount = paymentsCollectedToday > 0 ? paymentsCollectedToday : (todayOrders.reduce((sum, o) => sum + (o.advancePaid || o.amount || 0), 0) || 15000);
+    const collectionAmount =
+      paymentsCollectedToday > 0
+        ? paymentsCollectedToday
+        : todayOrders.reduce((sum, o) => sum + (o.advancePaid || 0), 0);
 
     return {
-      callsMade: Math.max(callsMade, 8),
-      customersContacted: Math.max(callsMade + visitsCompleted, 6),
+      callsMade,
+      customersContacted: callsMade + visitsCompleted,
       visitsScheduled,
       visitsCompleted,
       visitsMissed,
@@ -3091,7 +3273,10 @@ class DataStore {
 
       // Extract calls from daily reports or activities
       const uReports = this.dailyReports.filter((r) => r.userId === u.id || r.executiveId === u.id);
-      const calls = uReports.reduce((sum, r) => sum + (r.callsMade || 0), 0) || Math.max(12, uCustomers.length * 2);
+      const uActivitiesCalls = this.activities.filter(
+        (a) => a.performedById === u.id && a.type === 'Call'
+      ).length;
+      const calls = uReports.reduce((sum, r) => sum + (r.callsMade || 0), 0) || uActivitiesCalls;
 
       const ordValue = uOrders.reduce((sum, o) => sum + (o.grandTotal || o.amount || 0), 0);
       const payCollected = uPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
