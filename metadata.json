@@ -1,0 +1,6 @@
+{
+  "name": "Kerala Incinerator Sales CRM",
+  "description": "Production-ready, mobile-first Sales CRM, Order Fulfillment, Payment Tracking, and Delivery Management System for Kerala Incinerator with role-based access, lead tracking, visit check-in, quotations, and daily reports.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
